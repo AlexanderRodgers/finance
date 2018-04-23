@@ -86,42 +86,50 @@ def compile_data():
     main_df.to_csv('sp500_joined_closes.csv')
 
 def append_data():
+    #Opens the list of stocks on the S&P 500
     with open('sp500tickers.pickle', 'rb') as f:
         tickers = pickle.load(f)
 
+    #Creates a new dataframe
     append_df = pd.DataFrame()
+    #Gets the current date
     now = dt.datetime.now()
 
+    #Loops through the tickers in the list and checks to see if there
+    #is any data file on that stock and writes it to csv if there is none
     for ticker in tickers:
         ticker = ticker.replace('.', '-')
+        if not os.path.exists('stock_dfs/{}.csv'.format(ticker)):
+            print(ticker,'not in file')
+            data, metadata = series.get_daily_adjusted(symbol=ticker, outputsize='full')
+            data.to_csv('stock_dfs/{}.csv'.format(ticker))
+
+        #append_df is the dataframe of all the stocks in the folder
         append_df = pd.read_csv('stock_dfs/{}.csv'.format(ticker))
         append_df.set_index('date', inplace=True)
         #Gets the last value that was part of the query
         last_entry = append_df.index.values[-1]
-        #Needs protection in case the file has not been refreshed in over 100 days.
-        #It was designed this way to save the size of queries.
-        #Checks to see if the last entry was today
+        #Dates will never align if not a trading day.
         if last_entry != now.strftime('%Y-%m-%d'):
+            #Pulls the stock information
             updated_data, metadata = series.get_daily_adjusted(symbol=ticker, outputsize='compact')
             i = -1
 
+            #Loops until the entry from the last date of the file matches
+            #the date of the file that was just pulled.
             while last_entry != updated_data.index.values[i]:
                 i = i - 1
 
+            #Combines the frame of the old file and the updated data from new file.
             frames = [append_df, updated_data[i+1:]]
             result = pd.concat(frames)
 
+            #Converts that new dataframe to a csv file and overwrites the old one.
             result.to_csv('stock_dfs/{}.csv'.format(ticker))
-            '''
-            format_time = now.strftime('%H-%M-%S')+'_{}'.format(ticker)
-            print(format_time)
-            with open('stock_dfs/{}.csv'.format(ticker), 'a') as f:
-                updated_data[i+1:].to_csv(f, header=False)
-                print('updated file: ', ticker)
-            '''
+
             print('updated file: ',ticker)
         #used to make sure we don't go over the # of requests/sec
-        time.sleep(.25)
+        time.sleep(1)
 
     print('update finished')
 
